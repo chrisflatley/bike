@@ -3,6 +3,8 @@
   "devDependencies": {
     "@tsconfig/node16": "^1.0.2",
     "@types/jest": "^27.0.2",
+    "@types/node": "^16.11.3",
+    "@types/usb": "^1.5.3",
     "@typescript-eslint/eslint-plugin": "^5.1.0",
     "@typescript-eslint/parser": "^5.1.0",
     "eslint": "^8.0.1",
@@ -47,6 +49,7 @@
     "eslint-plugin-jest": "^25.2.2",
     "eslint-plugin-node": "^11.1.0",
     "pino": "^7.0.3",
-    "pino-pretty": "^7.1.0"
+    "pino-pretty": "^7.1.0",
+    "usb": "^1.8.0"
   }
 }
