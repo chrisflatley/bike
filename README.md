@@ -1,2 +1,3 @@
 # bike
-Testing ant and bluetooth smart trainers   
+
+Testing ant and bluetooth smart trainers

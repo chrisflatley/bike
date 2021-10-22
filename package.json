@@ -1,0 +1,52 @@
+{
+  "private": true,
+  "devDependencies": {
+    "@tsconfig/node16": "^1.0.2",
+    "@types/jest": "^27.0.2",
+    "@typescript-eslint/eslint-plugin": "^5.1.0",
+    "@typescript-eslint/parser": "^5.1.0",
+    "eslint": "^8.0.1",
+    "eslint-config-prettier": "^8.3.0",
+    "jest": "^27.3.1",
+    "nodemon": "^2.0.14",
+    "prettier": "^2.4.1",
+    "ts-jest": "^27.0.7",
+    "ts-node": "^10.3.1",
+    "typescript": "^4.4.4"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "name": "bike",
+  "description": "Testing ant and bluetooth smart trainers",
+  "version": "0.0.1",
+  "main": "build/index.js",
+  "scripts": {
+    "format": "prettier --write .",
+    "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
+    "build": "tsc",
+    "dev": "nodemon src/index.ts",
+    "test": "jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chrisflatley/bike.git"
+  },
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/chrisflatley/bike/issues"
+  },
+  "homepage": "https://github.com/chrisflatley/bike#readme",
+  "prettier": {
+    "semi": false
+  },
+  "dependencies": {
+    "eslint-plugin-eslint-comments": "^3.2.0",
+    "eslint-plugin-import": "^2.25.2",
+    "eslint-plugin-jest": "^25.2.2",
+    "eslint-plugin-node": "^11.1.0",
+    "pino": "^7.0.3",
+    "pino-pretty": "^7.1.0"
+  }
+}
