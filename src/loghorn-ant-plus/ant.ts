@@ -1,6 +1,8 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 import events from 'events'
 
-import usb from 'usb'
+import usb, { Device } from 'usb'
+import { Channel, DeviceId, Status } from './types';
 
 export enum Constants {
 	MESSAGE_RF = 0x01,
@@ -293,11 +295,10 @@ export interface ICancellationToken {
 
 class CancellationTokenListener {
 	_completed = false;
-	constructor(private fn: (d: any) => void, private cb: (err: Error) => void) { }
+	constructor(private fn: (d: usb.Device) => void, private cb: (err: Error) => void) { }
 	cancel() {
 		if (!this._completed) {
 			this._completed = true;
-			// @ts-ignore
 			usb.removeListener('attach', this.fn);
 			this.cb(new Error('Canceled'));
 		}
@@ -306,17 +307,17 @@ class CancellationTokenListener {
 
 export class USBDriver extends events.EventEmitter {
 	private static deviceInUse: usb.Device[] = [];
-	private device: usb.Device;
-	private iface: usb.Interface;
+	private device?: usb.Device;
+	private iface?: usb.Interface;
 	private detachedKernelDriver = false;
-	private inEp: usb.InEndpoint & events.EventEmitter;
-	private outEp: usb.OutEndpoint & events.EventEmitter;
-	private leftover: Buffer;
-	private usedChannels: number = 0;
+	private inEp?: usb.InEndpoint & events.EventEmitter;
+	private outEp?: usb.OutEndpoint & events.EventEmitter;
+	private leftover?: Buffer;
+	private usedChannels = 0;
 	private attachedSensors: BaseSensor[] = [];
 
-	maxChannels: number = 0;
-	canScan: boolean = false;
+	maxChannels = 0;
+	canScan = false;
 
 	constructor(private idVendor: number, private idProduct: number, dbgLevel = 0) {
 		super();
@@ -340,21 +341,22 @@ export class USBDriver extends events.EventEmitter {
 		while (devices.length) {
 			try {
 				this.device = devices.shift();
-				this.device.open();
-				this.iface = this.device.interfaces[0];
+				this.device?.open();
+				this.iface = this.device?.interfaces[0];
 				try {
-					if (this.iface.isKernelDriverActive()) {
+					if (this.iface?.isKernelDriverActive()) {
 						this.detachedKernelDriver = true;
-						this.iface.detachKernelDriver();
+						this.iface?.detachKernelDriver();
 					}
 				} catch {
 					// Ignore kernel driver errors;
+					console.error("Kernal driver error")
 				}
-				this.iface.claim();
+				this.iface?.claim();
 				break;
 			} catch {
 				// Ignore the error and try with the next device, if present
-				this.device.close();
+				this.device?.close();
 				this.device = undefined;
 				this.iface = undefined;
 			}
@@ -364,7 +366,7 @@ export class USBDriver extends events.EventEmitter {
 		}
 		USBDriver.deviceInUse.push(this.device);
 
-		this.inEp = this.iface.endpoints[0] as usb.InEndpoint;
+		this.inEp = this.iface?.endpoints[0] as usb.InEndpoint;
 
 		this.inEp.on('data', (data: Buffer) => {
 			if (!data.length) {
@@ -399,8 +401,8 @@ export class USBDriver extends events.EventEmitter {
 			}
 		});
 
-		this.inEp.on('error', (err: any) => {
-			//console.log('ERROR RECV: ', err);
+		this.inEp.on('error', (err: unknown) => {
+			console.error('ERROR RECV: ', err);
 		});
 
 		this.inEp.on('end', () => {
@@ -409,14 +411,14 @@ export class USBDriver extends events.EventEmitter {
 
 		this.inEp.startPoll();
 
-		this.outEp = this.iface.endpoints[1] as usb.OutEndpoint;
+		this.outEp = this.iface?.endpoints[1] as usb.OutEndpoint;
 
 		this.reset();
 
 		return true;
 	}
 
-	public openAsync(cb: (err: Error) => void): ICancellationToken {
+	public openAsync(cb: (err?: Error) => void): ICancellationToken {
 		let ct: CancellationTokenListener;
 		const doOpen = () => {
 			try {
@@ -432,14 +434,13 @@ export class USBDriver extends events.EventEmitter {
 					return false;
 				}
 			} catch (err) {
-				cb(err);
+				cb(err as Error);
 			}
 			return true;
 		};
-		const fn = (d) => {
+		const fn = (d: usb.Device) => {
 			if (!d || (d.deviceDescriptor.idVendor === this.idVendor && d.deviceDescriptor.idProduct === this.idProduct)) {
 				if (doOpen()) {
-					// @ts-ignore
 					usb.removeListener('attach', fn);
 				}
 			}
@@ -454,22 +455,21 @@ export class USBDriver extends events.EventEmitter {
 
 	public close() {
 		this.detach_all();
-		this.inEp.stopPoll(() => {
-			// @ts-ignore
-			this.iface.release(true, () => {
+		this.inEp?.stopPoll(() => {
+			this.iface?.release(true, () => {
 				if (this.detachedKernelDriver) {
 					this.detachedKernelDriver = false;
 					try {
-						this.iface.attachKernelDriver();
+						this.iface?.attachKernelDriver();
 					} catch {
 						// Ignore kernel driver errors;
 					}
 				}
 				this.iface = undefined;
-				this.device.reset(() => {
-					this.device.close();
+				this.device?.reset(() => {
+					this.device?.close();
 					this.emit('shutdown');
-					const devIdx = USBDriver.deviceInUse.indexOf(this.device);
+					const devIdx = this.device ? USBDriver.deviceInUse.indexOf(this.device) : 0
 					if (devIdx >= 0) {
 						USBDriver.deviceInUse.splice(devIdx, 1);
 					}
@@ -535,9 +535,9 @@ export class USBDriver extends events.EventEmitter {
 
 	public write(data: Buffer) {
 		//console.log('DATA SEND: ', data);
-		this.outEp.transfer(data, (error) => {
+		this.outEp?.transfer(data, (error) => {
 			if (error) {
-				//console.log('ERROR SEND: ', error);
+				console.error('ERROR SEND: ', error);
 			}
 		});
 	}
@@ -573,15 +573,16 @@ export class GarminStick3 extends USBDriver {
 
 export type SendCallback = (result: boolean) => void;
 
+
 export abstract class BaseSensor extends events.EventEmitter {
-	channel: number;
-	deviceID: number;
-	transmissionType: number;
+	channel?: number;
+	deviceID?: number;
+	transmissionType?: number;
 
 	private msgQueue: { msg: Buffer, cbk?: SendCallback }[] = [];
 
-	protected decodeDataCbk: (data: Buffer) => void;
-	protected statusCbk: (status: { msg: number, code: number }) => boolean;
+	protected decodeDataCbk?: (data: Buffer) => void;
+	protected statusCbk?: (status: Status) => boolean;
 
 	protected abstract updateState(deviceId: number, data: Buffer): void;
 
@@ -601,7 +602,7 @@ export abstract class BaseSensor extends events.EventEmitter {
 
 		const channel = 0;
 
-		const onStatus = (status) => {
+		const onStatus = (status: Status) => {
 			switch (status.msg) {
 				case Constants.MESSAGE_RF:
 					switch (status.code) {
@@ -613,14 +614,16 @@ export abstract class BaseSensor extends events.EventEmitter {
 						case Constants.EVENT_TRANSFER_TX_FAILED:
 						case Constants.EVENT_RX_FAIL:
 						case Constants.INVALID_SCAN_TX_CHANNEL:
-							const mc = this.msgQueue.shift();
-							if (mc && mc.cbk) {
-								mc.cbk(status.code === Constants.EVENT_TRANSFER_TX_COMPLETED);
+							{
+								const mc = this.msgQueue.shift();
+								if (mc && mc.cbk) {
+									mc.cbk(status.code === Constants.EVENT_TRANSFER_TX_COMPLETED);
+								}
+								if (this.msgQueue.length) {
+									this.write(this.msgQueue[0].msg);
+								}
+								return true;
 							}
-							if (this.msgQueue.length) {
-								this.write(this.msgQueue[0].msg);
-							}
-							return true;
 						default:
 							break;
 					}
@@ -691,7 +694,7 @@ export abstract class BaseSensor extends events.EventEmitter {
 		this.deviceID = deviceID;
 		this.transmissionType = transmissionType;
 
-		const onStatus = (status) => {
+		const onStatus = (status: Status) => {
 			switch (status.msg) {
 				case Constants.MESSAGE_RF:
 					switch (status.code) {
@@ -703,14 +706,16 @@ export abstract class BaseSensor extends events.EventEmitter {
 						case Constants.EVENT_TRANSFER_TX_FAILED:
 						case Constants.EVENT_RX_FAIL:
 						case Constants.INVALID_SCAN_TX_CHANNEL:
-							const mc = this.msgQueue.shift();
-							if (mc && mc.cbk) {
-								mc.cbk(status.code === Constants.EVENT_TRANSFER_TX_COMPLETED);
+							{
+								const mc = this.msgQueue.shift();
+								if (mc && mc.cbk) {
+									mc.cbk(status.code === Constants.EVENT_TRANSFER_TX_COMPLETED);
+								}
+								if (this.msgQueue.length) {
+									this.write(this.msgQueue[0].msg);
+								}
+								return true;
 							}
-							if (this.msgQueue.length) {
-								this.write(this.msgQueue[0].msg);
-							}
-							return true;
 						default:
 							break;
 					}
@@ -817,7 +822,7 @@ export abstract class AntPlusBaseSensor extends BaseSensor {
 
 export abstract class AntPlusSensor extends AntPlusBaseSensor {
 
-	constructor(stick: AntStick) {
+	constructor(stick: USBDriver) {
 		super(stick);
 		this.decodeDataCbk = this.decodeData.bind(this);
 	}
@@ -826,7 +831,7 @@ export abstract class AntPlusSensor extends AntPlusBaseSensor {
 		throw 'scanning unsupported';
 	}
 
-	protected attach(channel: number, type: string, deviceID: number, deviceType: number, transmissionType: number,
+	protected attach(channel: Channel, type: string, deviceID: DeviceId, deviceType: number, transmissionType: number,
 		timeout: number, period: number) {
 		return super.attach(channel, type, deviceID, deviceType, transmissionType, timeout, period);
 	}
@@ -836,10 +841,12 @@ export abstract class AntPlusSensor extends AntPlusBaseSensor {
 			case Constants.MESSAGE_CHANNEL_BROADCAST_DATA:
 			case Constants.MESSAGE_CHANNEL_ACKNOWLEDGED_DATA:
 			case Constants.MESSAGE_CHANNEL_BURST_DATA:
-				if (this.deviceID === 0) {
+				if (this.channel && this.deviceID === 0) {
 					this.write(Messages.requestMessage(this.channel, Constants.MESSAGE_CHANNEL_ID));
 				}
-				this.updateState(this.deviceID, data);
+				if(this.deviceID) {
+					this.updateState(this.deviceID, data);
+				}
 				break;
 			case Constants.MESSAGE_CHANNEL_ID:
 				this.deviceID = data.readUInt16LE(Messages.BUFFER_INDEX_MSG_DATA);
@@ -857,7 +864,7 @@ export abstract class AntPlusScanner extends AntPlusBaseSensor {
 	protected abstract createStateIfNew(deviceId: number): void;
 	protected abstract updateRssiAndThreshold(deviceId: number, rssi: number, threshold: number): void;
 
-	constructor(stick) {
+	constructor(stick: USBDriver) {
 		super(stick);
 		this.decodeDataCbk = this.decodeData.bind(this);
 	}

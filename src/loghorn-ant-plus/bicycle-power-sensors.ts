@@ -4,6 +4,7 @@
 */
 
 import { AntPlusSensor, AntPlusScanner, Messages } from './ant';
+import { Channel, DeviceId } from './types';
 
 class BicyclePowerSensorState {
 	constructor(deviceID: number) {
@@ -17,7 +18,7 @@ class BicyclePowerSensorState {
 	Cadence?: number;
 	AccumulatedPower?: number;
 	Power?: number;
-	offset: number = 0;
+	offset =  0;
 	EventCount?: number;
 	TimeStamp?: number;
 	Slope?: number;
@@ -28,21 +29,24 @@ class BicyclePowerSensorState {
 }
 
 class BicyclePowerScanState extends BicyclePowerSensorState {
-	Rssi: number;
-	Threshold: number;
+	Rssi?: number;
+	Threshold?: number;
 }
 
 export class BicyclePowerSensor extends AntPlusSensor {
 	static deviceType = 0x0B;
 
-	public attach(channel, deviceID): void {
+	public attachSensor(channel: Channel, deviceID: DeviceId): void {
 		super.attach(channel, 'receive', deviceID, BicyclePowerSensor.deviceType, 0, 255, 8182);
 		this.state = new BicyclePowerSensorState(deviceID);
 	}
 
-	private state: BicyclePowerSensorState;
+	private state?: BicyclePowerSensorState;
 
-	protected updateState(deviceId, data) {
+	protected updateState(deviceId: DeviceId, data: Buffer) {
+		if(!this.state) {
+			this.state = new BicyclePowerSensorState(deviceId);
+		}
 		this.state.DeviceID = deviceId;
 		updateState(this, this.state, data);
 	}
@@ -55,18 +59,18 @@ export class BicyclePowerScanner extends AntPlusScanner {
 
 	private states: { [id: number]: BicyclePowerScanState } = {};
 
-	protected createStateIfNew(deviceId) {
+	protected createStateIfNew(deviceId: DeviceId) {
 		if (!this.states[deviceId]) {
 			this.states[deviceId] = new BicyclePowerScanState(deviceId);
 		}
 	}
 
-	protected updateRssiAndThreshold(deviceId, rssi, threshold) {
+	protected updateRssiAndThreshold(deviceId: DeviceId, rssi: number, threshold: number) {
 		this.states[deviceId].Rssi = rssi;
 		this.states[deviceId].Threshold = threshold;
 	}
 
-	protected updateState(deviceId, data) {
+	protected updateState(deviceId: DeviceId, data: Buffer) {
 		updateState(this, this.states[deviceId], data);
 	}
 }
@@ -116,14 +120,17 @@ function updateState(
 			break;
 		}
 		case 0x20: {
-			const oldEventCount = state.EventCount;
-			const oldTimeStamp = state.TimeStamp;
-			const oldTorqueTicksStamp = state.TorqueTicksStamp;
-
 			let eventCount = data.readUInt8(Messages.BUFFER_INDEX_MSG_DATA + 1);
 			const slope = data.readUInt16LE(Messages.BUFFER_INDEX_MSG_DATA + 3);
 			let timeStamp = data.readUInt16LE(Messages.BUFFER_INDEX_MSG_DATA + 5);
 			let torqueTicksStamp = data.readUInt16LE(Messages.BUFFER_INDEX_MSG_DATA + 7);
+
+
+			// Use the existing value... or else use the new
+			const oldEventCount = state.EventCount ?? eventCount;
+			const oldTimeStamp = state.TimeStamp ?? timeStamp;
+			const oldTorqueTicksStamp = state.TorqueTicksStamp ?? torqueTicksStamp;
+
 
 			if (timeStamp !== oldTimeStamp && eventCount !== oldEventCount) {
 				state.EventCount = eventCount;
@@ -138,7 +145,7 @@ function updateState(
 
 				state.Slope = slope;
 				state.TorqueTicksStamp = torqueTicksStamp;
-				if (oldTorqueTicksStamp > torqueTicksStamp) { //Hit rollover value
+				if ( oldTorqueTicksStamp > torqueTicksStamp) { //Hit rollover value
 					torqueTicksStamp += 65535;
 				}
 
