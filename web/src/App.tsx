@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import  { useCallback, useEffect, useState } from 'react';
+import { CHARACTERISTIC_USER_DECRIPTION_DESCRIPTOR, CYCLING_POWER_SERVICE } from './constants';
 
 function useBluetoothDevice(options: RequestDeviceOptions = { acceptAllDevices: true }): [BluetoothDevice | undefined, () => void]  {
   const [device, setDevice] = useState<BluetoothDevice | undefined>(undefined)
@@ -95,26 +96,112 @@ function useBluetoothServiceCharacteristics(service: BluetoothRemoteGATTService 
   return characteristics
 }
 
-function useBluetoothCharacteristicValue<T>(service: BluetoothRemoteGATTService | undefined,  characteristic: string): T | undefined  {
+function useBluetoothDescriptor(characteristic: BluetoothRemoteGATTCharacteristic | undefined, descriptor: BluetoothDescriptorUUID): BluetoothRemoteGATTDescriptor | undefined {
+  const [descriptorValue, setDescriptor] = useState<BluetoothRemoteGATTDescriptor | undefined>(undefined)
+  
+  useEffect(() => {
+    async function doGet() {
+      if(characteristic) {
+        const c = await characteristic.getDescriptor(descriptor)
+        setDescriptor(c)
+      } else {
+        setDescriptor(undefined)
+      }
+    }
+
+    doGet()
+  }, [characteristic, descriptor, setDescriptor])
+
+  return descriptorValue
+}
+
+function useBluetoothDescriptorValueAsString(descriptor?: BluetoothRemoteGATTDescriptor): string {
+  const [value, setValue] = useState<string>("")
+
+   
+  useEffect(() => {
+    async function doGet() {
+      if(descriptor) {
+        try {
+          const decoder = new TextDecoder('utf-8');
+          const c = await descriptor.readValue()
+          setValue(decoder.decode(c))
+        } catch {
+          setValue("")
+        }
+      } else {
+        setValue("")
+      }
+    }
+
+    doGet()
+  }, [descriptor, setValue])
+
+  return value
+}
+
+function useBluetoothDescriptors(characteristic: BluetoothRemoteGATTCharacteristic | undefined): BluetoothRemoteGATTDescriptor[] {
+  const [descriptors, setDescriptors] = useState<BluetoothRemoteGATTDescriptor[]>([])
+
+  useEffect(() => {
+    async function doList() {
+      if(characteristic) {
+        const c = await characteristic.getDescriptors()
+        setDescriptors(c)
+      } else {
+        setDescriptors([])
+      }
+    }
+
+    doList()
+  }, [characteristic, setDescriptors])
+
+  return descriptors
+}
+
+function useReadBluetoothCharacteristicValue<T>(characteristic: BluetoothRemoteGATTCharacteristic | undefined, transform: (data: DataView) => T): T | undefined  {
   const [value, setValue] = useState<T | undefined>(undefined)
 
   useEffect(() => {
-    async function onValueChanged(event: Event) {
-      console.log(event.target)
+    async function doRead() {
+      if(characteristic && characteristic.properties.read) {
+        const dataView = await characteristic.readValue()
+        const t = transform(dataView)
+        setValue(t)
+      }
+    }
+
+    doRead()
+  }, [characteristic, transform, setValue])
+
+
+  return value
+}
+
+function useNotifyBluetoothCharacteristicValue<T>(characteristic: BluetoothRemoteGATTCharacteristic | undefined, transform: (data: DataView) => T): T | undefined  {
+  const [value, setValue] = useState<T | undefined>(undefined)
+
+  useEffect(() => {
+    function onValueChanged(event: Event): void {
+      const e =  event as Event & { target?: { value?: DataView }}
+      if(e.target?.value) {
+        const t = transform(e.target.value)
+        setValue(t)
+      }
+
     }
 
     async function doNotify() {
-      if(service) {
-        const c = await service.getCharacteristic(characteristic)
-        if(c) {
-          c.addEventListener('characteristicvaluechanged', onValueChanged)
-          c.startNotifications()
-        }
+      if(characteristic && characteristic.properties.notify) {
+        characteristic.addEventListener('characteristicvaluechanged', onValueChanged)
+        characteristic.startNotifications()
       }
     }
 
     doNotify()
-  }, [service, characteristic, setValue])
+
+    // TODO: Remove notification
+  }, [characteristic, transform, setValue])
 
 
   return value
@@ -141,18 +228,50 @@ export function BluetoothDeviceInfo (props: { device?: BluetoothDevice}) {
   )
 }
 
+export function BluetoothCharacteristicProperty(props: { title: string, value: boolean}) {
+  const { title, value } = props
+  return (
+    <span>{title}: {value ? "Y" : "N"}</span>
+  )
+}
+
 export function BluetoothCharacteristicInfo(props: { characteristic?: BluetoothRemoteGATTCharacteristic}) {
   const { characteristic } = props
+  const read = useReadBluetoothCharacteristicValue<string>(characteristic, x => `Read data is ${x.byteLength} bytes`)
+  const notified = useNotifyBluetoothCharacteristicValue<string>(characteristic, x => `Notify data is ${x.byteLength} bytes`)
+
+  const descriptors = useBluetoothDescriptors(characteristic)
+
+
+  const descriptionDescriptor = useBluetoothDescriptor(characteristic, CHARACTERISTIC_USER_DECRIPTION_DESCRIPTOR)
+  const description = useBluetoothDescriptorValueAsString(descriptionDescriptor)
 
   if(!characteristic) {
     return <p>No Bluetooth characteristic</p>
   }
 
-  // TODO: Lazy on preoptyies
-  // No read value
+  
   return <>
     <h6>Bluetooth characteristic {characteristic.uuid}</h6>
-    <p>{JSON.stringify(characteristic.properties)}</p>
+    <p>{description}</p>
+    <ul>
+      <li><BluetoothCharacteristicProperty title="authenticatedSignedWrites" value={characteristic.properties.authenticatedSignedWrites} /></li>
+      <li><BluetoothCharacteristicProperty title="broadcast" value={characteristic.properties.broadcast} /></li>
+      <li><BluetoothCharacteristicProperty title="indicate" value={characteristic.properties.indicate} /></li>
+      <li><BluetoothCharacteristicProperty title="notify" value={characteristic.properties.notify} /></li>
+      <li><BluetoothCharacteristicProperty title="read" value={characteristic.properties.read} /></li>
+      <li><BluetoothCharacteristicProperty title="reliableWrite" value={characteristic.properties.reliableWrite} /></li>
+      <li><BluetoothCharacteristicProperty title="writableAuxiliaries" value={characteristic.properties.writableAuxiliaries} /></li>
+      <li><BluetoothCharacteristicProperty title="write" value={characteristic.properties.write} /></li>
+      <li><BluetoothCharacteristicProperty title="writeWithoutResponse" value={characteristic.properties.writeWithoutResponse} /></li>
+    </ul>
+    <p>{read}</p>
+    <p>{notified}</p>
+    <ul>
+      {descriptors.map(x => 
+        <li key={x.uuid}>{x.uuid}</li>
+      )}
+    </ul>
   </>
 }
 
@@ -202,7 +321,11 @@ export function BluetoothServerInfo (props: { server?: BluetoothRemoteGATTServer
 
 export function App() {
 
-  const [device, request] = useBluetoothDevice()
+  const [device, request] = useBluetoothDevice({
+    filters: [{
+      services: [CYCLING_POWER_SERVICE]
+    }]
+  })
   const server = useBluetoothServer(device)
   // const service = useBluetoothService(server, '')
   // const characteristicValue = useBluetoothCharacteristicValue(service, '')
