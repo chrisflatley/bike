@@ -12,9 +12,10 @@ export function useBluetoothDevice(options: RequestDeviceOptions = { acceptAllDe
                 const d = await navigator.bluetooth.requestDevice(options)
                 setDevice(d)
 
-                // TODO: Should we deal with this nicely?
-                // Disconnect then setDevice to null (which should remove off tere)
-                //   device.addEventListener('gattserverdisconnected', onDisconnected);
+                // On disconnect then setDevice to null 
+                d.addEventListener('gattserverdisconnected', () => {
+                    setDevice(undefined)
+                })
 
                 return
             } catch {
@@ -319,7 +320,8 @@ export function useNotifyBluetoothCharacteristicValue<T>(characteristic: Bluetoo
         return () => {
             logger.debug("Clean up of notified for characteristic value %s", characteristic?.uuid)
             if (characteristic && characteristic.properties.notify) {
-                // characteristic.removeEventListener('characteristicvaluechanged', onValueChanged)
+                characteristic.removeEventListener('characteristicvaluechanged', onValueChanged)
+                // Causes Chrome to crash:
                 // characteristic.stopNotifications()
                 logger.debug("Notification stopped on characteristic %s", characteristic?.uuid)
             }
