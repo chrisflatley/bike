@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { BluetoothDeviceInfo, BluetoothServerInfo, useBluetoothDevice, useBluetoothServer, useBluetoothService, useBluetoothServiceCharacteristic, useNotifyBluetoothCharacteristicValue, useReadBluetoothCharacteristicValue } from './bluetooth';
 import {  CYCLING_POWER_FEATURE_CHARACTERISTIC, CYCLING_POWER_MEASUREMENT_CHARACTERISTIC, CYCLING_POWER_SERVICE, DEVICE_INFORMATION_SERVICE } from './bluetooth/constants';
+import { bufferToHex } from './utils';
 
 class CyclingPowerFeatures {
   public readonly pedalPowerPresent: boolean
@@ -39,7 +40,7 @@ class CyclingPowerFeatures {
 function CyclingPowerFeature(props: { service: BluetoothRemoteGATTService }) {
   const { service } = props
 
-  const transform = useCallback( (x: DataView) => new CyclingPowerFeatures(x.getUint16(0)), [])
+  const transform = useCallback( (x: DataView) => new CyclingPowerFeatures(x.getUint16(0, true)), [])
   const characteristic = useBluetoothServiceCharacteristic(service, CYCLING_POWER_FEATURE_CHARACTERISTIC)
   const features = useReadBluetoothCharacteristicValue(characteristic, transform)
 
@@ -50,6 +51,7 @@ function CyclingPowerFeature(props: { service: BluetoothRemoteGATTService }) {
   )
 
 }
+
 
 class CyclingPowerMeasure {
 
@@ -76,10 +78,13 @@ class CyclingPowerMeasure {
 
 
   constructor(data: DataView) {
-    this.features = new CyclingPowerFeatures(data.getUint16(0))
+    this.features = new CyclingPowerFeatures(data.getUint16(0, true))
 
     // Mandatory
-    this.power = data.getInt16(2)
+    this.power = data.getInt16(2, true)
+
+    console.log(bufferToHex(data.buffer))
+
 
     // Feature flag based
 
@@ -90,41 +95,42 @@ class CyclingPowerMeasure {
     }
 
     if(this.features.accumlatedTorquePresent) {
-      this.accumlatedTorque = data.getUint16(offset) / 2
+      this.accumlatedTorque = data.getUint16(offset, true) / 2
       offset+=2
     }
 
     if(this.features.wheelRevolutionPresent) {
       this.cumulativeWheelRevolutions = data.getUint16(offset)
       offset+=2
-      this.lastWheelEventTime = data.getUint16(offset) / 2048
+      this.lastWheelEventTime = data.getUint16(offset, true) / 2048
       offset+=2
     }
 
     if(this.features.crankRevolutionPresent) {
-      this.cumulativeCrankRevolutions = data.getUint16(offset)
+      this.cumulativeCrankRevolutions = data.getUint16(offset, true)
       offset+=2
-      this.lastCrankEventTime = data.getUint16(offset) / 1024
+      this.lastCrankEventTime = data.getUint16(offset, true) / 1024
       offset+=2
     }
 
     if(this.features.extremeForcePresent) {
-      this.maxExtremeForce = data.getInt16(offset)
+      this.maxExtremeForce = data.getInt16(offset, true)
       offset+=2
-      this.minExtremeForce = data.getInt16(offset)
+      this.minExtremeForce = data.getInt16(offset, true)
       offset+=2
     }
 
     if(this.features.extremeTorquePresent) {
-      this.maxExtremeTorque = data.getInt16(offset) / 32
+      this.maxExtremeTorque = data.getInt16(offset, true) / 32
       offset+=2
-      this.minExtremeTorque = data.getInt16(offset) / 32
+      this.minExtremeTorque = data.getInt16(offset, true) / 32
       offset+=2
     }
 
     if(this.features.extremeAnglePresent) {
       // Three bytes long
-      const field = data.getUint8(offset) + (data.getUint16(offset) << 8)
+      // TODO: unsure if order is reconstructed here
+      const field = data.getUint8(offset) + (data.getUint16(offset + 1, true) << 8)
     
       this.maxExtremeAngle = (field & 0xFFF)
       this.minExtremeAngle = (field & 0xFFF000) >> 12
@@ -132,18 +138,18 @@ class CyclingPowerMeasure {
     }
 
     if(this.features.topDeadSpotAnglePresent) {
-      this.topDeadSpotAngle = data.getInt16(offset)
+      this.topDeadSpotAngle = data.getInt16(offset, true)
       offset+=2
 
     }
 
     if(this.features.bottomDeadSpotAnglePresent) {
-      this.bottomDeadSpotAngle = data.getInt16(offset)
+      this.bottomDeadSpotAngle = data.getInt16(offset, true)
       offset+=2
     }
 
     if(this.features.accumlatedEnergyPresent) {
-      this.accumulatedEnergy = data.getInt16(offset) 
+      this.accumulatedEnergy = data.getInt16(offset, true) 
       offset+=2
 
     }
