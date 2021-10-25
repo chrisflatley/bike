@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { BluetoothDeviceInfo, BluetoothServerInfo, useBluetoothDevice, useBluetoothServer, useBluetoothService, useBluetoothServiceCharacteristic, useNotifyBluetoothCharacteristicValue, useReadBluetoothCharacteristicValue } from './bluetooth';
-import {  CYCLING_POWER_FEATURE_CHARACTERISTIC, CYCLING_POWER_MEASUREMENT_CHARACTERISTIC, CYCLING_POWER_SERVICE, DEVICE_INFORMATION_SERVICE } from './bluetooth/constants';
+import {  CYCLING_POWER_FEATURE_CHARACTERISTIC, CYCLING_POWER_MEASUREMENT_CHARACTERISTIC, CYCLING_POWER_SERVICE, DEVICE_INFORMATION_SERVICE, SENSOR_LOCATION_CHARACTERISTIC } from './bluetooth/constants';
 import { bufferToHex } from './utils';
 
 class CyclingPowerFeatures {
@@ -170,6 +170,55 @@ function CyclingPowerMeasurement(props: { service: BluetoothRemoteGATTService })
   )
 } 
 
+enum SensorLocationEnum {
+ OTHER = 0,
+  TOP_OF_SHOE = 1,
+  IN_SHOE = 2,
+  HIP = 3,
+  FRONT_WHEEL = 4,
+  LEFT_CRANK = 5,
+  RIGHT_CRANK = 6,
+  LEFT_PEDAL = 7,
+  RIGHT_PEDAL = 8, 
+  FRONT_HUB = 9,
+  REAR_DROPOUT = 10,
+  CHAINSTAY = 11,
+  REAR_WHEEL = 12,
+  REAR_HUB = 13,
+  CHEST = 14,
+  SPIDER = 15,
+  CHAIN_RING = 16
+}
+
+class SensorLocation {
+
+  public readonly location: SensorLocationEnum = SensorLocationEnum.OTHER
+
+  constructor(data: DataView) {
+    const field = data.getUint8(0)
+
+    if(field >= 0 && field <= 16) {
+      this.location = field 
+    } else {
+      this.location = SensorLocationEnum.OTHER
+    }
+  }
+}
+
+function SensorLocationInfo(props: { service: BluetoothRemoteGATTService }) {
+  const { service } = props
+
+  const transform = useCallback( (x: DataView) => new SensorLocation(x), [])
+  const characteristic = useBluetoothServiceCharacteristic(service, SENSOR_LOCATION_CHARACTERISTIC)
+  const location = useReadBluetoothCharacteristicValue(characteristic, transform)
+
+  return (
+    <>
+      <p>Location: {location?.location ?? "Undefined"}</p>
+    </>
+  )
+}
+
 function CyclingPower(props: {server?: BluetoothRemoteGATTServer}) {
     const { server} = props
     const service = useBluetoothService(server, CYCLING_POWER_SERVICE)
@@ -178,11 +227,11 @@ function CyclingPower(props: {server?: BluetoothRemoteGATTServer}) {
       return null
     }
     
-    // TODO: <SensorLocation service={service} /> but I don't know where it's defined. It's only 1 byte.
-
     return (
       <>
         <CyclingPowerFeature service={service} />
+        <hr />
+        <SensorLocationInfo service={service} /> 
         <hr />
         <CyclingPowerMeasurement service={service} />
       </>
